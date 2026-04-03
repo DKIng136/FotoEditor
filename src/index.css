@@ -98,3 +98,30 @@ input[type='range']:active::-webkit-slider-thumb {
 .animate-pulse-glow {
   animation: pulse-glow 2s infinite;
 }
+
+/* ReactCrop Custom Styling */
+.ReactCrop__drag-handle {
+  width: 12px !important;
+  height: 12px !important;
+  background-color: #8B5CF6 !important;
+  border: 2px solid #FAFAFA !important;
+  border-radius: 50% !important;
+  box-shadow: 0 0 10px rgba(139, 92, 246, 0.5) !important;
+  transition: transform 0.2s ease !important;
+}
+
+.ReactCrop__drag-handle:hover {
+  transform: scale(1.3) !important;
+}
+
+.ReactCrop__crop-selection {
+  border: 1px solid rgba(250, 250, 250, 0.5) !important;
+  box-shadow: 0 0 0 9999em rgba(0, 0, 0, 0.7) !important;
+}
+
+.ReactCrop__rule-of-thirds-vt::before,
+.ReactCrop__rule-of-thirds-vt::after,
+.ReactCrop__rule-of-thirds-hz::before,
+.ReactCrop__rule-of-thirds-hz::after {
+  background-color: rgba(250, 250, 250, 0.3) !important;
+}

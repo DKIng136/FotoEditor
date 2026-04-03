@@ -18,7 +18,11 @@ import {
   Crop as CropIcon,
   History as HistoryIcon,
   Check,
-  X
+  X,
+  Edit3,
+  ZoomIn,
+  ZoomOut,
+  Search
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import ReactCrop, { type Crop, type PixelCrop, centerCrop, makeAspectCrop } from 'react-image-crop';
@@ -81,14 +85,70 @@ export default function App() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [showOriginal, setShowOriginal] = useState(false);
   const [imageInfo, setImageInfo] = useState<{ width: number; height: number; name: string } | null>(null);
+  const [projectName, setProjectName] = useState<string>("Dự_án_chưa_đặt_tên");
+  const [isEditingName, setIsEditingName] = useState(false);
 
   // Crop State
   const [isCropMode, setIsCropMode] = useState(false);
   const [crop, setCrop] = useState<Crop>();
   const [completedCrop, setCompletedCrop] = useState<PixelCrop>();
   const [aspect, setAspect] = useState<number | undefined>(undefined);
+  const [cropZoom, setCropZoom] = useState(0.5);
+  const [baseWidth, setBaseWidth] = useState(0);
   const imgRef = useRef<HTMLImageElement>(null);
-  
+  const cropContainerRef = useRef<HTMLDivElement>(null);
+  const lastZoomRef = useRef(0.5);
+  const mousePosRef = useRef({ x: 0, y: 0 });
+
+  // Synchronize scroll position with zoom changes before browser paint
+  React.useLayoutEffect(() => {
+    const container = cropContainerRef.current;
+    const img = imgRef.current;
+    if (!container || !img || lastZoomRef.current === cropZoom) return;
+
+    const zoomRatio = cropZoom / lastZoomRef.current;
+    
+    // Calculate how much the point under the mouse shifted relative to the image
+    const dx = mousePosRef.current.x * (zoomRatio - 1);
+    const dy = mousePosRef.current.y * (zoomRatio - 1);
+    
+    container.scrollLeft += dx;
+    container.scrollTop += dy;
+    
+    lastZoomRef.current = cropZoom;
+  }, [cropZoom]);
+
+  React.useEffect(() => {
+    const container = cropContainerRef.current;
+    if (!container) return;
+
+    const handleWheel = (e: WheelEvent) => {
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+        
+        // Exponential zoom for better performance and feel
+        const zoomFactor = 1.15;
+        const delta = e.deltaY > 0 ? 1 / zoomFactor : zoomFactor;
+        const nextZoom = Math.min(8, Math.max(0.1, cropZoom * delta));
+        
+        if (nextZoom !== cropZoom) {
+          const imgRect = imgRef.current?.getBoundingClientRect();
+          if (imgRect) {
+            // Store mouse position relative to the image itself
+            mousePosRef.current = {
+              x: e.clientX - imgRect.left,
+              y: e.clientY - imgRect.top
+            };
+            setCropZoom(nextZoom);
+          }
+        }
+      }
+    };
+
+    container.addEventListener('wheel', handleWheel, { passive: false });
+    return () => container.removeEventListener('wheel', handleWheel);
+  }, [isCropMode, cropZoom]);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const imageRef = useRef<HTMLImageElement>(null);
@@ -135,6 +195,7 @@ export default function App() {
             height: img.height,
             name: file.name
           };
+          setProjectName(file.name);
           const dataUrl = event.target?.result as string;
           setImage(dataUrl);
           setOriginalImage(dataUrl);
@@ -200,19 +261,32 @@ export default function App() {
 
   const onImageLoad = (e: React.SyntheticEvent<HTMLImageElement>) => {
     const { width, height } = e.currentTarget;
-    const initialCrop = centerCrop(
-      makeAspectCrop(
-        {
-          unit: '%',
-          width: 90,
-        },
-        aspect || 1,
+    setBaseWidth(width);
+    
+    let initialCrop;
+    if (aspect) {
+      initialCrop = centerCrop(
+        makeAspectCrop(
+          {
+            unit: '%',
+            width: 90,
+          },
+          aspect,
+          width,
+          height
+        ),
         width,
         height
-      ),
-      width,
-      height
-    );
+      );
+    } else {
+      initialCrop = {
+        unit: '%',
+        width: 90,
+        height: 90,
+        x: 5,
+        y: 5
+      };
+    }
     setCrop(initialCrop);
   };
 
@@ -281,6 +355,7 @@ export default function App() {
     setImageInfo(newInfo);
     addToHistory(croppedDataUrl, filters, newInfo);
     setIsCropMode(false);
+    setCropZoom(1);
     setIsProcessing(false);
   };
 
@@ -369,10 +444,68 @@ export default function App() {
             }}
             className="absolute -inset-3 bg-gradient-to-tr from-indigo-500 via-purple-500 to-pink-500 blur-2xl opacity-30 group-hover:opacity-60 transition-opacity" 
           />
-          <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 via-purple-600 to-pink-600 rounded-2xl flex items-center justify-center shadow-2xl shadow-purple-500/20 relative border border-white/20 overflow-hidden">
-            <div className="absolute inset-0 bg-white/10 backdrop-blur-[1px]" />
-            <span className="text-[18px] font-normal tracking-normal text-white relative z-10 drop-shadow-md font-bubble">BpE</span>
-            <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-white/20 blur-md rounded-full" />
+          <div className="w-10 h-10 relative flex items-center justify-center group">
+            <svg viewBox="0 0 100 100" className="w-full h-full drop-shadow-[0_0_15px_rgba(168,85,247,0.6)]">
+              <defs>
+                <linearGradient id="logo-border" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="#A855F7" />
+                  <stop offset="100%" stopColor="#EC4899" />
+                </linearGradient>
+                <linearGradient id="camera-body" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="#3B2667" />
+                  <stop offset="100%" stopColor="#1C192E" />
+                </linearGradient>
+                <linearGradient id="lens-grad" x1="100%" y1="0%" x2="0%" y2="100%">
+                  <stop offset="0%" stopColor="#FF71B6" />
+                  <stop offset="50%" stopColor="#A855F7" />
+                  <stop offset="100%" stopColor="#4F46E5" />
+                </linearGradient>
+                <linearGradient id="metallic-border" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="#FFD1E8" />
+                  <stop offset="20%" stopColor="#FF71B6" />
+                  <stop offset="45%" stopColor="#FFFFFF" />
+                  <stop offset="55%" stopColor="#A855F7" />
+                  <stop offset="80%" stopColor="#4F46E5" />
+                  <stop offset="100%" stopColor="#2D1B4E" />
+                </linearGradient>
+                <filter id="blur-glow" x="-50%" y="-50%" width="200%" height="200%">
+                  <feGaussianBlur in="SourceGraphic" stdDeviation="5" />
+                </filter>
+              </defs>
+              
+              {/* Outer Frame */}
+              <rect x="4" y="4" width="92" height="92" rx="28" fill="#050505" stroke="url(#logo-border)" strokeWidth="3.5" />
+              
+              {/* Blurred Camera Shadow behind the lens */}
+              <path 
+                d="M25 42C25 38 28 35 32 35H40L44 28H56L60 35H68C72 35 75 38 75 42V68C75 72 72 75 68 75H32C28 75 25 72 25 68V42Z" 
+                fill="#A855F7" 
+                filter="url(#blur-glow)"
+                className="opacity-100"
+              />
+
+              {/* Camera Body */}
+              <path 
+                d="M25 42C25 38 28 35 32 35H40L44 28H56L60 35H68C72 35 75 38 75 42V68C75 72 72 75 68 75H32C28 75 25 72 25 68V42Z" 
+                fill="url(#camera-body)" 
+              />
+              
+              {/* Lens */}
+              <circle cx="50" cy="55" r="19" stroke="rgba(168,85,247,0.3)" strokeWidth="4" fill="none" filter="url(#blur-glow)" />
+              <circle cx="50" cy="55" r="15" fill="url(#lens-grad)" />
+              <circle cx="50" cy="55" r="16.5" stroke="url(#metallic-border)" strokeWidth="3" fill="none" />
+              
+              {/* Small Flash/Sensor */}
+              <circle cx="68" cy="44" r="2.2" fill="#111" opacity="0.8" />
+
+              {/* Sparkles (4-pointed stars) */}
+              <g transform="translate(65, 28) rotate(-10)">
+                <path d="M0 -12 L2.5 -2.5 L12 0 L2.5 2.5 L0 12 L-2.5 2.5 L-12 0 L-2.5 -2.5 Z" fill="#FBCFE8" />
+              </g>
+              <g transform="translate(78, 42) rotate(-10) scale(0.5)">
+                <path d="M0 -12 L2.5 -2.5 L12 0 L2.5 2.5 L0 12 L-2.5 2.5 L-12 0 L-2.5 -2.5 Z" fill="#FBCFE8" />
+              </g>
+            </svg>
           </div>
         </div>
         
@@ -403,9 +536,25 @@ export default function App() {
           <div className="flex items-center gap-4">
             <div className="flex flex-col">
               <span className="text-[10px] uppercase tracking-[0.2em] bg-clip-text text-transparent bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-400 font-black mb-0.5">Dự án</span>
-              <span className="text-xs font-medium text-[#FAFAFA] truncate max-w-[200px]">
-                {imageInfo?.name || "Dự_án_chưa_đặt_tên"}
-              </span>
+              {isEditingName ? (
+                <input
+                  autoFocus
+                  type="text"
+                  value={projectName}
+                  onChange={(e) => setProjectName(e.target.value)}
+                  onBlur={() => setIsEditingName(false)}
+                  onKeyDown={(e) => e.key === 'Enter' && setIsEditingName(false)}
+                  className="text-xs font-medium text-[#FAFAFA] bg-white/5 border border-purple-500/50 rounded px-1 outline-none w-[200px]"
+                />
+              ) : (
+                <span 
+                  onClick={() => setIsEditingName(true)}
+                  className="text-xs font-medium text-[#FAFAFA] truncate max-w-[200px] cursor-pointer hover:text-purple-400 transition-colors flex items-center gap-2 group/name"
+                >
+                  {projectName}
+                  <Edit3 size={10} className="opacity-0 group-hover/name:opacity-100 transition-opacity text-purple-400" />
+                </span>
+              )}
             </div>
             {image && (
               <>
@@ -506,58 +655,127 @@ export default function App() {
               <motion.div 
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
-                className="absolute inset-0 z-40 bg-black/95 flex flex-col items-center justify-center p-4"
+                className="fixed inset-0 z-[100] bg-[#050506] flex flex-col"
               >
-                <div className="relative max-w-full max-h-[82vh] overflow-auto custom-scrollbar flex items-center justify-center">
-                  <ReactCrop
-                    crop={crop}
-                    onChange={(c) => setCrop(c)}
-                    onComplete={(c) => setCompletedCrop(c)}
-                    aspect={aspect}
-                    className="max-w-full"
-                  >
-                    <img
-                      ref={imgRef}
-                      src={image}
-                      alt="Nguồn cắt"
-                      onLoad={onImageLoad}
-                      className="max-w-full max-h-[82vh] object-contain"
-                      style={{ filter: filterStyle.filter }}
-                    />
-                  </ReactCrop>
+                {/* Crop Header */}
+                <div className="h-14 border-b border-white/5 flex items-center justify-between px-6 bg-black/40 backdrop-blur-xl">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-purple-600/20 rounded-lg text-purple-500">
+                      <CropIcon size={18} />
+                    </div>
+                    <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-white">Công cụ cắt ảnh</h3>
+                  </div>
+                  
+                  <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-3 bg-white/5 px-4 py-1.5 rounded-full border border-white/10">
+                      <button 
+                        onClick={() => setCropZoom(Math.max(0.2, cropZoom - 0.05))}
+                        className="text-[#A1A1AA] hover:text-white transition-colors"
+                      >
+                        <ZoomOut size={14} />
+                      </button>
+                      <input 
+                        type="range"
+                        min="0.2"
+                        max="5"
+                        step="0.01"
+                        value={cropZoom}
+                        onChange={(e) => setCropZoom(parseFloat(e.target.value))}
+                        className="w-24 h-1 bg-white/10 rounded-full appearance-none cursor-pointer accent-purple-500"
+                      />
+                      <button 
+                        onClick={() => setCropZoom(Math.min(5, cropZoom + 0.05))}
+                        className="text-[#A1A1AA] hover:text-white transition-colors"
+                      >
+                        <ZoomIn size={14} />
+                      </button>
+                      <span className="text-[10px] font-mono text-purple-500 font-bold min-w-[30px] text-right">
+                        {Math.round(cropZoom * 200)}%
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <button 
+                      onClick={() => {
+                        setIsCropMode(false);
+                        setCropZoom(1);
+                      }}
+                      className="px-4 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-all"
+                    >
+                      Hủy bỏ
+                    </button>
+                    <button 
+                      onClick={applyCrop}
+                      disabled={!completedCrop?.width || !completedCrop?.height}
+                      className="px-6 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-lg text-[10px] font-bold uppercase tracking-widest shadow-lg shadow-purple-900/40 transition-all disabled:opacity-50"
+                    >
+                      Xác nhận
+                    </button>
+                  </div>
                 </div>
 
-                <div className="mt-4 flex flex-col items-center gap-4 z-50 w-full max-w-2xl px-4">
-                  <div className="flex flex-wrap justify-center gap-1.5 bg-[#141417]/80 backdrop-blur-md p-2 rounded-xl border border-[#27272A] shadow-2xl">
+                {/* Crop Area */}
+                <div className="flex-1 relative overflow-hidden bg-[#020203]">
+                  <div className="absolute inset-0 opacity-[0.03] pointer-events-none" 
+                       style={{ backgroundImage: 'radial-gradient(#ffffff 1px, transparent 1px)', backgroundSize: '30px 30px' }} />
+                  
+                  <div 
+                    ref={cropContainerRef}
+                    className="w-full h-full overflow-auto custom-scrollbar flex p-12 md:p-24"
+                  >
+                    <div className="relative inline-block shadow-[0_0_100px_rgba(0,0,0,0.5)] m-auto">
+                      <ReactCrop
+                        crop={crop}
+                        onChange={(c) => setCrop(c)}
+                        onComplete={(c) => setCompletedCrop(c)}
+                        aspect={aspect}
+                        ruleOfThirds
+                        minWidth={10}
+                        minHeight={10}
+                      >
+                        <img
+                          ref={imgRef}
+                          src={image}
+                          alt="Nguồn cắt"
+                          onLoad={onImageLoad}
+                          className="block"
+                          style={{ 
+                            filter: filterStyle.filter,
+                            width: baseWidth ? `${baseWidth * cropZoom}px` : 'auto',
+                            height: 'auto',
+                            maxWidth: 'none',
+                            maxHeight: 'none',
+                            willChange: 'width, height',
+                          }}
+                        />
+                      </ReactCrop>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Crop Footer */}
+                <div className="p-1.5 pb-3 bg-black/80 backdrop-blur-2xl border-t border-white/5 flex flex-col items-center gap-1">
+                  <div className="flex flex-wrap justify-center gap-1 bg-white/5 p-1 rounded-xl border border-white/10">
                     {ASPECT_RATIOS.map((ratio) => (
                       <button
                         key={ratio.label}
                         onClick={() => handleAspectChange(ratio.value)}
-                        className={`px-3 py-1 rounded-lg text-[9px] font-bold uppercase transition-all ${
+                        className={`px-4 py-1.5 rounded-lg text-[10px] font-bold uppercase transition-all ${
                           aspect === ratio.value 
-                            ? 'bg-purple-600 text-white' 
-                            : 'bg-[#1C1C21] text-[#A1A1AA] hover:bg-[#27272A]'
+                            ? 'bg-purple-600 text-white shadow-lg shadow-purple-900/20' 
+                            : 'text-[#A1A1AA] hover:text-white hover:bg-white/5'
                         }`}
                       >
                         {ratio.label}
                       </button>
                     ))}
                   </div>
-                  <div className="flex gap-3">
-                    <button 
-                      onClick={() => setIsCropMode(false)}
-                      className="px-6 py-2 bg-[#1C1C21] border border-[#27272A] rounded-lg text-xs font-bold hover:bg-[#27272A] transition-all"
-                    >
-                      Hủy
-                    </button>
-                    <button 
-                      onClick={applyCrop}
-                      disabled={!completedCrop?.width || !completedCrop?.height}
-                      className="px-8 py-2 bg-purple-600 rounded-lg text-xs font-bold hover:bg-purple-500 shadow-xl shadow-purple-900/20 transition-all disabled:opacity-50"
-                    >
-                      Áp dụng cắt
-                    </button>
-                  </div>
+                  
+                  <p className="text-[8px] text-[#52525B] font-medium flex items-center gap-2">
+                    <Search size={10} />
+                    Giữ <span className="text-purple-500 font-bold">Ctrl</span> + Cuộn chuột để soi chi tiết • Kéo các góc để điều chỉnh vùng cắt
+                  </p>
                 </div>
               </motion.div>
             ) : (
